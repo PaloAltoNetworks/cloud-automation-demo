@@ -14,6 +14,7 @@ const BaseDir string = "/home/ec2-user"
 const RepoName string = "cloud-automation-demo"
 const RepoDir string = "/home/ec2-user/cloud-automation-demo"
 const TerraformBinary string = "/home/ec2-user/bin/terraform"
+const CommitBinary string = "/home/ec2-user/bin/commit"
 
 type Ping struct {
     Hook HookInfo `json:"hook"`
@@ -205,6 +206,13 @@ Port = "%d"
             log.Printf("Failed to run terraform apply: %s", err)
             return
         }
+        c5 := exec.Command(CommitBinary)
+        c5.Stdout, c5.Stderr = lf, lf
+        if err = c5.Run(); err != nil {
+            log.Printf("Failed to commit: %s", err)
+            return
+        }
+
         log.Printf("Done!")
         if !deployed {
             deployed = true
@@ -267,6 +275,11 @@ func init() {
     } else if config.Hostname == "" || config.Username == "" || config.Password == "" || config.GitHubAccount == "" {
         panic("Not all fields are present in config.json")
     }
+
+    // Set env variables for the terraform provider and commit binary.
+    os.Setenv("PANOS_HOSTNAME", config.Hostname)
+    os.Setenv("PANOS_USERNAME", config.Username)
+    os.Setenv("PANOS_PASSWORD", config.Password)
 }
 
 func main() {

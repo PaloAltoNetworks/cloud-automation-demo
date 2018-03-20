@@ -1,9 +1,3 @@
-provider "panos" {
-    hostname = "${var.Hostname}"
-    username = "${var.Username}"
-    password = "${var.Password}"
-}
-
 resource "panos_zone" "zout" {
     name = "L3-untrust"
     mode = "layer3"
