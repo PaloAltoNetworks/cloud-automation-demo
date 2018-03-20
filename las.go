@@ -67,6 +67,7 @@ type HookConfig struct {
 // Global variables.
 var config HookConfig
 var lf *os.File
+var deployed bool
 
 
 func handleReq(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +154,9 @@ password: '%s'
 
         log.Printf("Running Ansible to configure the firewall ...")
         log.Printf("Done!")
+        if !deployed {
+            deployed = true
+        }
     } else if demo.Method == "terraform" {
         dstDir := fmt.Sprintf("%s/tf", BaseDir)
         log.Printf("Updating terraform variables ...")
@@ -195,6 +199,9 @@ Port = "%d"
             return
         }
         log.Printf("Done!")
+        if !deployed {
+            deployed = true
+        }
     } else {
         log.Printf("Unknown demo method: %s", demo.Method)
     }

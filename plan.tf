@@ -119,9 +119,7 @@ rm -f tf.zip
 cd ..
 echo "Building webhook listener ..."
 touch /tmp/hook.log
-cd cloud-automation-demo
-go build -o ../bin/las cloud-automation-demo/las.go
-cd ..
+go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
 echo "Fixing all permissions ..."
 chown -R ec2-user:ec2-user /home/ec2-user
 chown ec2-user:ec2-user /tmp/hook.log
