@@ -105,6 +105,8 @@ echo "alias wl='tail -f /tmp/hook.log'" >> /home/ec2-user/.bash_profile
 echo "Updating yum and installing golang ..."
 yum update -y
 yum install -y golang
+echo "Retrieving pango ..."
+GOPATH=/home/ec2-user/golang go get github.com/PaloAltoNetworks/pango
 echo "Pulling down the github repo to watch ..."
 git clone https://github.com/PaloAltoNetworks/cloud-automation-demo.git
 cp -r cloud-automation-demo/tf .
