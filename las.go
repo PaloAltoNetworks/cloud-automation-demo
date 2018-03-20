@@ -135,6 +135,14 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
 
     // Perform the requested demo.
     if demo.Method == "ansible" {
+        dstDir := fmt.Sprintf("%s/an", BaseDir)
+
+        log.Printf("Copying ansible files into place ...")
+        if err = copyFiles(fmt.Sprintf("%s/an", RepoDir), dstDir); err != nil {
+            log.Printf("%s", err)
+            return
+        }
+
         log.Printf("Creating ansible playbooks ...")
         if err = os.Chdir(BaseDir + "/an"); err != nil {
             log.Printf("Failed cd: %s", err)
@@ -159,6 +167,13 @@ password: '%s'
         }
     } else if demo.Method == "terraform" {
         dstDir := fmt.Sprintf("%s/tf", BaseDir)
+
+        log.Printf("Copying terraform files into place ...")
+        if err = copyFiles(fmt.Sprintf("%s/tf", RepoDir), dstDir); err != nil {
+            log.Printf("%s", err)
+            return
+        }
+
         log.Printf("Updating terraform variables ...")
         if err = os.Chdir(dstDir); err != nil {
             log.Printf("Failed cd: %s", err)
@@ -176,14 +191,6 @@ Password = %q
 Port = "%d"
 `, config.Hostname, config.Username, config.Password, demo.Port))
         fd.Close()
-
-        log.Printf("Copying files into place ...")
-        c2 := exec.Command("cp", "-f", fmt.Sprintf("%s/tf/*", RepoDir), ".")
-        c2.Stdout, c2.Stderr = lf, lf
-        if err = c2.Run(); err != nil {
-            log.Printf("Failed to copy files: %s", err)
-            return
-        }
 
         log.Printf("Running Terraform to configure the firewall ...")
         c3 := exec.Command(TerraformBinary, "init")
@@ -209,6 +216,39 @@ Port = "%d"
     fmt.Fprintf(w, "Hello, world!")
 }
 
+func copyFiles(src, dst string) error {
+    files, err := ioutil.ReadDir(src)
+    if err != nil {
+        return fmt.Errorf("Error listing dir contents: %s", err)
+    }
+
+    for _, fi := range files {
+        if fi.IsDir() {
+            continue
+        }
+        sfd, err := os.Open(fmt.Sprintf("%s/%s", src, fi.Name()))
+        if err != nil {
+            return fmt.Errorf("Failed to open src %q: %s", fi.Name(), err)
+        }
+        defer sfd.Close()
+
+        data, err := ioutil.ReadAll(sfd)
+        if err != nil {
+            return fmt.Errorf("Failed readall of %q: %s", fi.Name(), err)
+        }
+
+        dfd, err := os.OpenFile(fmt.Sprintf("%s/%s", dst, fi.Name()), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+        if err != nil {
+            return fmt.Errorf("Failed to open dst %q: %s", fi.Name(), err)
+        }
+        defer dfd.Close()
+
+        fmt.Fprintf(dfd, "%s", data)
+    }
+
+    return nil
+}
+
 func init() {
     var err error
 
@@ -230,7 +270,9 @@ func init() {
 }
 
 func main() {
-    lf, err := os.OpenFile("/tmp/hook.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    var err error
+
+    lf, err = os.OpenFile("/tmp/hook.log", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
     if err != nil {
         panic(err)
     }
