@@ -199,7 +199,7 @@ Port = "%d"
             log.Printf("Failed to run terraform init: %s", err)
             return
         }
-        c4 := exec.Command(fmt.Sprintf(TerraformBinary, "apply", "-auto-approve"))
+        c4 := exec.Command(TerraformBinary, "apply", "-auto-approve")
         c4.Stdout, c4.Stderr = lf, lf
         if err = c4.Run(); err != nil {
             log.Printf("Failed to run terraform apply: %s", err)
