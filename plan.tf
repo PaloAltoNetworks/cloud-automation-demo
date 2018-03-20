@@ -123,7 +123,7 @@ echo "Building webhook listener ..."
 touch /tmp/hook.log
 go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
 echo "Building commit binary ..."
-go build -o /home/ec2-user/bin/commit /home/ec2-user/cloud-automation-demo/commit.go
+GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/commit /home/ec2-user/cloud-automation-demo/commit.go
 echo "Fixing all permissions ..."
 chown -R ec2-user:ec2-user /home/ec2-user
 chown ec2-user:ec2-user /tmp/hook.log
