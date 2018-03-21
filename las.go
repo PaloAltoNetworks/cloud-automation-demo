@@ -8,6 +8,7 @@ import (
     "net/http"
     "os"
     "os/exec"
+    "strings"
 )
 
 const BaseDir string = "/home/ec2-user"
@@ -61,6 +62,7 @@ type HeadCommit struct {
 }
 
 type DemoConfig struct {
+    ServiceName string `json:"app_name"`
     Port int `json:"port"`
     Method string `json:"exec"`
 }
@@ -110,6 +112,15 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Commit message: %q", data.Commit.Msg)
 
+    // Verify the commit msg doesn't have characters the shell would interpret.
+    for _, v := range []string{"\"", "'", "`", "$"} {
+        if strings.Contains(data.Commit.Msg, v) {
+            log.Printf("Commit message contains %q, setting commit message to default value", v)
+            data.Commit.Msg = "Perform commit"
+            break
+        }
+    }
+
     // Chdir to the git repo and git pull.
     log.Printf("Updating local %q ...", data.Repo.Name)
     if err = os.Chdir(RepoDir); err != nil {
@@ -138,7 +149,7 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
         return
     }
     demo := DemoConfig{}
-    if err = json.Unmarshal(body, &demo); err != nil || demo.Port == 0 || demo.Method == "" {
+    if err = json.Unmarshal(body, &demo); err != nil || demo.ServiceName == "" || demo.Port == 0 || demo.Method == "" {
         log.Printf("Failed to parse demo config: %s", err)
         return
     }
@@ -195,7 +206,8 @@ password: '%s'
             return
         }
         fmt.Fprintf(fd, fmt.Sprintf(`Port = "%d"
-`, demo.Port))
+ServiceName = %q
+`, demo.Port, demo.ServiceName))
         fd.Close()
 
         log.Printf("Running Terraform to configure the firewall ...")
@@ -211,7 +223,7 @@ password: '%s'
             log.Printf("Failed to run terraform apply: %s", err)
             return
         }
-        c5 := exec.Command(CommitBinary)
+        c5 := exec.Command(CommitBinary, "-c", data.Commit.Msg)
         c5.Stdout, c5.Stderr = lf, lf
         if err = c5.Run(); err != nil {
             log.Printf("Failed to commit: %s", err)

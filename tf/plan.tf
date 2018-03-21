@@ -9,7 +9,7 @@ resource "panos_zone" "zin" {
 }
 
 resource "panos_service_object" "app" {
-    name = "cicd app"
+    name = "${var.ServiceName}"
     description = "Corporate App"
     protocol = "tcp"
     destination_port = "${var.Port}"

@@ -1,1 +1,2 @@
 variable "Port" {}
+variable "ServiceName" {}
