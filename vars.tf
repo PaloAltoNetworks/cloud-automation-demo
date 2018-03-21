@@ -8,4 +8,4 @@ variable "aws_region" { default = "us-west-1" }
 variable "panos_ami" { default = "ami-5d59583d" }
 variable "panos_username" { default = "admin" }
 variable "linux_ami" { default = "ami-824c4ee2" }
-variable "linux_instance_type" { default = "t2.small" }
+variable "linux_instance_type" { default = "t2.micro" }
