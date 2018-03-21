@@ -30,6 +30,7 @@ type HookInfo struct {
 type Payload struct {
     Repo Repository `json:"repository"`
     From Pusher `json:"pusher"`
+    Commit HeadCommit `json:"head_commit"`
 }
 
 func (p *Payload) IsValid() error {
@@ -38,6 +39,8 @@ func (p *Payload) IsValid() error {
         return fmt.Errorf("Invalid repo name")
     } else if p.From.Name != config.GitHubAccount {
         return fmt.Errorf("Skipping other user commit")
+    } else if p.Commit.Msg == "" {
+        return fmt.Errorf("No head commit message")
     }
 
     return nil
@@ -51,6 +54,10 @@ type Repository struct {
 
 type Pusher struct {
     Name string `json:"name"`
+}
+
+type HeadCommit struct {
+    Msg string `json:"message"`
 }
 
 type DemoConfig struct {
@@ -100,6 +107,8 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
         log.Printf("%s", err)
         return
     }
+
+    log.Printf("Commit message: %q", data.Commit.Msg)
 
     // Chdir to the git repo and git pull.
     log.Printf("Updating local %q ...", data.Repo.Name)
@@ -185,12 +194,8 @@ password: '%s'
             log.Printf("Failed to open terraform.tfvars: %s", err)
             return
         }
-        fmt.Fprintf(fd, fmt.Sprintf(`
-Hostname = %q
-Username = %q
-Password = %q
-Port = "%d"
-`, config.Hostname, config.Username, config.Password, demo.Port))
+        fmt.Fprintf(fd, fmt.Sprintf(`Port = "%d"
+`, demo.Port))
         fd.Close()
 
         log.Printf("Running Terraform to configure the firewall ...")
