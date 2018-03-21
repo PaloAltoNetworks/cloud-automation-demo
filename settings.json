@@ -1,5 +1,5 @@
 {
     "app_name": "company app",
-    "port": 3532,
+    "port": 12321,
     "exec": "terraform"
 }
