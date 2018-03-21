@@ -1,4 +1,4 @@
 {
-    "port": 3532,
+    "port": 13532,
     "exec": "terraform"
 }
