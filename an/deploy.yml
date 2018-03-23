@@ -1,0 +1,38 @@
+- name: Configure the Palo Alto Networks firewall
+  hosts: fw
+  connection: local
+  gather_facts: False
+
+  tasks:
+  - name: Include vars
+    include_vars: 'vars.yml'
+    no_log: 'yes'
+
+  - name: "Configure eth1/1"
+    panos_interface:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      if_name: 'ethernet1/1'
+      zone_name: "L3-trust"
+      commit: False
+
+  - name: "Configure eth1/2"
+    panos_interface:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      if_name: 'ethernet1/2'
+      zone_name: "L3-untrust"
+      commit: False
+
+  - name: "Configure corporate app"
+    panos_object:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      operation: '{{ operation }}'
+      serviceobject: '{{ service_name }}'
+      destination_port: '{{ service_port }}'
+      protocol: 'tcp'
+      description: 'Corporate application service'

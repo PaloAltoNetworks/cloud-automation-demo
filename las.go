@@ -9,6 +9,8 @@ import (
     "os"
     "os/exec"
     "strings"
+
+    "github.com/PaloAltoNetworks/pango"
 )
 
 const BaseDir string = "/home/ec2-user"
@@ -67,6 +69,20 @@ type DemoConfig struct {
     Method string `json:"exec"`
 }
 
+func (dc DemoConfig) IsValid() error {
+    if dc.ServiceName == "" {
+        return fmt.Errorf("Missing app_name param")
+    } else if dc.Port == 0 {
+        return fmt.Errorf("Missing port (int)")
+    } else if dc.Method == "" {
+        return fmt.Errorf("Missing \"exec\"")
+    } else if dc.Method != "ansible" || dc.Method != "terraform" {
+        return fmt.Errorf("Invalid \"exec\" specified; only 'ansible' or 'terraform' allowed")
+    }
+
+    return nil
+}
+
 type HookConfig struct {
     Hostname string `json:"hostname"`
     Username string `json:"username"`
@@ -77,7 +93,7 @@ type HookConfig struct {
 // Global variables.
 var config HookConfig
 var lf *os.File
-var deployed bool
+var fw *pango.Firewall
 
 
 func handleReq(w http.ResponseWriter, r *http.Request) {
@@ -135,22 +151,16 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Copy all files into place.
+    if err = copyAllFiles(); err != nil {
+        log.Printf("%s", err)
+        return
+    }
+
     // Read the config from the repo.
-    log.Printf("Reading settings.json ...")
-    fd, err := os.Open("settings.json")
+    demo, err := loadDemoConfig()
     if err != nil {
-        log.Printf("Failed to open settings.json: %s", err)
-        return
-    }
-    defer fd.Close()
-    body, err = ioutil.ReadAll(fd)
-    if err != nil {
-        log.Printf("Failed to read settings.json: %s", err)
-        return
-    }
-    demo := DemoConfig{}
-    if err = json.Unmarshal(body, &demo); err != nil || demo.ServiceName == "" || demo.Port == 0 || demo.Method == "" {
-        log.Printf("Failed to parse demo config: %s", err)
+        log.Printf("%s", err)
         return
     }
 
@@ -158,49 +168,49 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
     if demo.Method == "ansible" {
         dstDir := fmt.Sprintf("%s/an", BaseDir)
 
-        log.Printf("Copying ansible files into place ...")
-        if err = copyFiles(fmt.Sprintf("%s/an", RepoDir), dstDir); err != nil {
-            log.Printf("%s", err)
-            return
-        }
-
         log.Printf("Creating ansible playbooks ...")
-        if err = os.Chdir(BaseDir + "/an"); err != nil {
+        if err = os.Chdir(dstDir); err != nil {
             log.Printf("Failed cd: %s", err)
             return
         }
-        fd, err = os.OpenFile("fw_creds.yml", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+        op, err := ansibleOperationFor(demo.ServiceName)
         if err != nil {
-            log.Printf("Failed to open fw_creds.yml: %s", err)
+            log.Printf("Failed to determine ansible operation: %s", err)
+            return
+        }
+        fd, err := os.OpenFile("vars.yml", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+        if err != nil {
+            log.Printf("Failed to open vars.yml: %s", err)
             return
         }
         fmt.Fprintf(fd, fmt.Sprintf(`
 ip_address: '%s'
 username: '%s'
 password: '%s'
-`, config.Hostname, config.Username, config.Password))
+operation: '%s'
+service_name: '%s"
+service_port: %d
+`, config.Hostname, config.Username, config.Password, op, demo.ServiceName, demo.Port))
         fd.Close()
 
         log.Printf("Running Ansible to configure the firewall ...")
-        log.Printf("Done!")
-        if !deployed {
-            deployed = true
-        }
-    } else if demo.Method == "terraform" {
-        dstDir := fmt.Sprintf("%s/tf", BaseDir)
-
-        log.Printf("Copying terraform files into place ...")
-        if err = copyFiles(fmt.Sprintf("%s/tf", RepoDir), dstDir); err != nil {
-            log.Printf("%s", err)
+        c2 := exec.Command("ansible-playbook", "-i", "hosts", "deploy.yml")
+        c2.Stdout, c2.Stderr = lf, lf
+        if err = c2.Run(); err != nil {
+            log.Printf("Failed to run ansible playbook: %s", err)
             return
         }
+
+        log.Printf("Done!")
+    } else if demo.Method == "terraform" {
+        dstDir := fmt.Sprintf("%s/tf", BaseDir)
 
         log.Printf("Updating terraform variables ...")
         if err = os.Chdir(dstDir); err != nil {
             log.Printf("Failed cd: %s", err)
             return
         }
-        fd, err = os.OpenFile("terraform.tfvars", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+        fd, err := os.OpenFile("terraform.tfvars", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
         if err != nil {
             log.Printf("Failed to open terraform.tfvars: %s", err)
             return
@@ -231,14 +241,50 @@ ServiceName = %q
         }
 
         log.Printf("Done!")
-        if !deployed {
-            deployed = true
-        }
     } else {
         log.Printf("Unknown demo method: %s", demo.Method)
     }
 
     fmt.Fprintf(w, "Hello, world!")
+}
+
+func ansibleOperationFor(svc string) (string, error) {
+    var err error
+
+    if fw.ApiKey == "" {
+        if err = fw.Initialize(); err != nil {
+            return "", err
+        }
+    }
+
+    list, err := fw.Objects.Services.GetList("")
+    if err != nil {
+        return "", err
+    }
+
+    for _, v := range list {
+        if svc == v {
+            return "update", nil
+        }
+    }
+
+    return "add", nil
+}
+
+func copyAllFiles() error {
+    var err error
+
+    log.Printf("Copying files into place ...")
+
+    if err = copyFiles(fmt.Sprintf("%s/an", RepoDir), fmt.Sprintf("%s/an", BaseDir)); err != nil {
+        return err
+    }
+
+    if err = copyFiles(fmt.Sprintf("%s/tf", RepoDir), fmt.Sprintf("%s/tf", BaseDir)); err != nil {
+        return err
+    }
+
+    return nil
 }
 
 func copyFiles(src, dst string) error {
@@ -274,6 +320,32 @@ func copyFiles(src, dst string) error {
     return nil
 }
 
+func loadDemoConfig() (*DemoConfig, error) {
+    var err error
+
+    // Read the config from the repo.
+    log.Printf("Reading settings.json ...")
+    fd, err := os.Open(fmt.Sprintf("%s/settings.json", RepoDir))
+    if err != nil {
+        return nil, fmt.Errorf("Failed to open settings.json: %s", err)
+    }
+    defer fd.Close()
+
+    body, err := ioutil.ReadAll(fd)
+    if err != nil {
+        return nil, fmt.Errorf("Failed to read settings.json: %s", err)
+    }
+
+    demo := DemoConfig{}
+    if err = json.Unmarshal(body, &demo); err != nil {
+        return nil, fmt.Errorf("Failed to parse demo config: %s", err)
+    } else if err = demo.IsValid(); err != nil {
+        return nil, err
+    }
+
+    return &demo, nil
+}
+
 func init() {
     var err error
 
@@ -297,6 +369,16 @@ func init() {
     os.Setenv("PANOS_HOSTNAME", config.Hostname)
     os.Setenv("PANOS_USERNAME", config.Username)
     os.Setenv("PANOS_PASSWORD", config.Password)
+
+    // Create pango connection to the firewall for Ansible.  Don't initialize
+    // at this point because likely the firewall hasn't come up yet and had
+    // the auth credentials configured.
+    fw = &pango.Firewall{Client: pango.Client{
+        Hostname: config.Hostname,
+        Username: config.Username,
+        Password: config.Password,
+        Logging: pango.LogQuiet,
+    }}
 }
 
 func main() {

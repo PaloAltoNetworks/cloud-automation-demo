@@ -112,7 +112,10 @@ git clone https://github.com/PaloAltoNetworks/cloud-automation-demo.git
 cp -r cloud-automation-demo/tf .
 cp -r cloud-automation-demo/an .
 echo "Ansible: install and prep ..."
-pip install pan-python pandevice ansible
+pip install pan-python pandevice xmltodict ansible
+echo "${aws_instance.panos.public_ip}" > an/deploy.retry
+echo "[fw]" > an/hosts
+echo "${aws_instance.panos.public_ip} ansible_python_interpreter=python" >> an/hosts
 echo "Terraform: install and prep ..."
 cd bin
 curl -o tf.zip https://releases.hashicorp.com/terraform/0.11.4/terraform_0.11.4_linux_amd64.zip
