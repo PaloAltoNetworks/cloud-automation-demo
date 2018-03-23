@@ -76,7 +76,7 @@ func (dc DemoConfig) IsValid() error {
         return fmt.Errorf("Missing port (int)")
     } else if dc.Method == "" {
         return fmt.Errorf("Missing \"exec\"")
-    } else if dc.Method != "ansible" || dc.Method != "terraform" {
+    } else if dc.Method != "ansible" && dc.Method != "terraform" {
         return fmt.Errorf("Invalid \"exec\" specified; only 'ansible' or 'terraform' allowed")
     }
 
