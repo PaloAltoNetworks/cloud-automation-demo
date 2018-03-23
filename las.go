@@ -16,6 +16,7 @@ import (
 const BaseDir string = "/home/ec2-user"
 const RepoName string = "cloud-automation-demo"
 const RepoDir string = "/home/ec2-user/cloud-automation-demo"
+const AnsibleExecutable string = "/usr/local/bin/ansible-playbook"
 const TerraformBinary string = "/home/ec2-user/bin/terraform"
 const CommitBinary string = "/home/ec2-user/bin/commit"
 
@@ -194,7 +195,7 @@ service_port: %d
         fd.Close()
 
         log.Printf("Running Ansible to configure the firewall ...")
-        c2 := exec.Command("ansible-playbook", "-i", "hosts", "deploy.yml")
+        c2 := exec.Command(AnsibleExecutable, "-i", "hosts", "deploy.yml")
         c2.Stdout, c2.Stderr = lf, lf
         if err = c2.Run(); err != nil {
             log.Printf("Failed to run ansible playbook: %s", err)
