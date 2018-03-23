@@ -113,6 +113,7 @@ cp -r cloud-automation-demo/tf .
 cp -r cloud-automation-demo/an .
 echo "Ansible: install and prep ..."
 pip install pan-python pandevice xmltodict ansible
+touch /home/ec2-user/an/vars.yml
 echo "${aws_instance.panos.public_ip}" > an/deploy.retry
 echo "[fw]" > an/hosts
 echo "${aws_instance.panos.public_ip} ansible_python_interpreter=python" >> an/hosts

@@ -184,12 +184,11 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
             log.Printf("Failed to open vars.yml: %s", err)
             return
         }
-        fmt.Fprintf(fd, fmt.Sprintf(`
-ip_address: '%s'
+        fmt.Fprintf(fd, fmt.Sprintf(`ip_address: '%s'
 username: '%s'
 password: '%s'
 operation: '%s'
-service_name: '%s"
+service_name: '%s'
 service_port: %d
 `, config.Hostname, config.Username, config.Password, op, demo.ServiceName, demo.Port))
         fd.Close()
