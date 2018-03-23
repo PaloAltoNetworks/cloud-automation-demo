@@ -124,7 +124,7 @@ rm -f tf.zip
 cd ..
 echo "Building webhook listener ..."
 touch /tmp/hook.log
-go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
+GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
 echo "Building commit binary ..."
 GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/commit /home/ec2-user/cloud-automation-demo/commit.go
 echo "Fixing all permissions ..."
