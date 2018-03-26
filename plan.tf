@@ -99,6 +99,9 @@ mkdir golang/src
 echo "Updating .bash_profile ..."
 echo 'export GOPATH=/home/ec2-user/golang' >> /home/ec2-user/.bash_profile
 echo 'export GOBIN=/home/ec2-user/golang/bin' >> /home/ec2-user/.bash_profile
+echo 'export PANOS_HOSTNAME=${aws_instance.panos.public_ip}' >> /home/ec2-user/.bash_profile
+echo 'export PANOS_USERNAME=${var.panos_username}' >> /home/ec2-user/.bash_profile
+echo 'export PANOS_PASSWORD="${random_string.randPrefix.result}${random_string.randSuffix.result}"' >> /home/ec2-user/.bash_profile
 echo "alias s='cd ..'" >> /home/ec2-user/.bash_profile
 echo "alias la='ls -laF'" >> /home/ec2-user/.bash_profile
 echo "alias wl='tail -f /tmp/hook.log'" >> /home/ec2-user/.bash_profile
@@ -115,7 +118,7 @@ cp -r cloud-automation-demo/tricky .
 cp -r cloud-automation-demo/anchor .
 echo "Ansible: install and prep ..."
 pip install pan-python pandevice xmltodict ansible
-echo "hostname: '${aws_instance.panos.public_ip}'" > anchor/vars.yml
+echo "ip_address: '${aws_instance.panos.public_ip}'" > anchor/vars.yml
 echo "username: '${var.panos_username}'" >> anchor/vars.yml
 echo "password: '${random_string.randPrefix.result}${random_string.randSuffix.result}'" >> anchor/vars.yml
 touch anchor/deploy.retry
