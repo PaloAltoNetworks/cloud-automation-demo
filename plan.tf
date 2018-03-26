@@ -91,8 +91,8 @@ echo '  "password": "${random_string.randPrefix.result}${random_string.randSuffi
 echo '}' >> config.json
 echo "Making required directories ..."
 mkdir bin
-mkdir tf
-mkdir an
+mkdir anchor
+mkdir tricky
 mkdir golang
 mkdir golang/bin
 mkdir golang/src
@@ -107,17 +107,24 @@ yum update -y
 yum install -y golang
 echo "Retrieving pango ..."
 GOPATH=/home/ec2-user/golang go get github.com/PaloAltoNetworks/pango
-echo "Pulling down the github repo to watch ..."
+echo "Pulling down ${var.github_account}'s HookOrg repo ..."
+git clone "https://github.com/HookOrg/${var.github_account}.git"
+echo "Pulling down the cloud demo repo ..."
 git clone https://github.com/PaloAltoNetworks/cloud-automation-demo.git
-cp -r cloud-automation-demo/tf .
-cp -r cloud-automation-demo/an .
+cp -r cloud-automation-demo/tricky .
+cp -r cloud-automation-demo/anchor .
 echo "Ansible: install and prep ..."
 pip install pan-python pandevice xmltodict ansible
-touch /home/ec2-user/an/vars.yml
-echo "${aws_instance.panos.public_ip}" > an/deploy.retry
-echo "[fw]" > an/hosts
-echo "${aws_instance.panos.public_ip} ansible_python_interpreter=python" >> an/hosts
+echo "hostname: '${aws_instance.panos.public_ip}'" > anchor/vars.yml
+echo "username: '${var.panos_username}'" >> anchor/vars.yml
+echo "password: '${random_string.randPrefix.result}${random_string.randSuffix.result}'" >> anchor/vars.yml
+touch anchor/deploy.retry
+echo "[fw]" > anchor/hosts
+echo "${aws_instance.panos.public_ip} ansible_python_interpreter=python" >> anchor/hosts
 echo "Terraform: install and prep ..."
+touch tricky/plan.tf
+touch tricky/terraform.tfstate
+touch tricky/terraform.tfstate.backup
 cd bin
 curl -o tf.zip https://releases.hashicorp.com/terraform/0.11.4/terraform_0.11.4_linux_amd64.zip
 unzip tf.zip
@@ -140,7 +147,7 @@ INIT
 
 provider "github" {
     token = "${var.github_token}"
-    organization = "PaloAltoNetworks"
+    organization = "HookOrg"
 }
 
 resource "github_repository_webhook" "hook" {

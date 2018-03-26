@@ -1,6 +1,7 @@
 package main
 
 import (
+    "bytes"
     "encoding/json"
     "fmt"
     "io/ioutil"
@@ -39,7 +40,7 @@ type Payload struct {
 
 func (p *Payload) IsValid() error {
     log.Printf("Validating payload ...")
-    if p.Repo.Name != fmt.Sprintf("PaloAltoNetworks/%s", RepoName) {
+    if p.Repo.Name != fmt.Sprintf("HookOrg/%s", config.GitHubAccount) {
         return fmt.Errorf("Invalid repo name")
     } else if p.From.Name != config.GitHubAccount {
         return fmt.Errorf("Skipping other user commit")
@@ -65,23 +66,33 @@ type HeadCommit struct {
 }
 
 type DemoConfig struct {
-    ServiceName string `json:"app_name"`
-    Port int `json:"port"`
     Method string `json:"exec"`
+    Services []DemoService `json:"apps"`
 }
 
 func (dc DemoConfig) IsValid() error {
-    if dc.ServiceName == "" {
-        return fmt.Errorf("Missing app_name param")
-    } else if dc.Port == 0 {
-        return fmt.Errorf("Missing port (int)")
-    } else if dc.Method == "" {
+    if dc.Method == "" {
         return fmt.Errorf("Missing \"exec\"")
     } else if dc.Method != "ansible" && dc.Method != "terraform" {
         return fmt.Errorf("Invalid \"exec\" specified; only 'ansible' or 'terraform' allowed")
+    } else if len(dc.Services) == 0 {
+        return fmt.Errorf("No \"apps\" block found")
+    }
+
+    for i, v := range dc.Services {
+        if v.Name == "" {
+            return fmt.Errorf("Offset %d: no name specified", i)
+        } else if len(v.Ports) == 0 {
+            return fmt.Errorf("Offset %d: no ports specified", i)
+        }
     }
 
     return nil
+}
+
+type DemoService struct {
+    Name string `json:"name"`
+    Ports []int `json:"ports"`
 }
 
 type HookConfig struct {
@@ -95,6 +106,8 @@ type HookConfig struct {
 var config HookConfig
 var lf *os.File
 var fw *pango.Firewall
+var ansibleBegin []byte
+var terraformBegin []byte
 
 
 func handleReq(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +153,7 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
 
     // Chdir to the git repo and git pull.
     log.Printf("Updating local %q ...", data.Repo.Name)
-    if err = os.Chdir(RepoDir); err != nil {
+    if err = os.Chdir(fmt.Sprintf("%s/%s", BaseDir, config.GitHubAccount)); err != nil {
         log.Printf("Failed cd: %s", err)
         return
     }
@@ -152,11 +165,13 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    /*
     // Copy all files into place.
     if err = copyAllFiles(); err != nil {
         log.Printf("%s", err)
         return
     }
+    */
 
     // Read the config from the repo.
     demo, err := loadDemoConfig()
@@ -167,31 +182,28 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
 
     // Perform the requested demo.
     if demo.Method == "ansible" {
-        dstDir := fmt.Sprintf("%s/an", BaseDir)
+        dstDir := fmt.Sprintf("%s/anchor", BaseDir)
 
         log.Printf("Creating ansible playbooks ...")
         if err = os.Chdir(dstDir); err != nil {
             log.Printf("Failed cd: %s", err)
             return
         }
-        op, err := ansibleOperationFor(demo.ServiceName)
+
+        end, err := ansibleConfig(demo.Services)
         if err != nil {
-            log.Printf("Failed to determine ansible operation: %s", err)
+            log.Printf("Failed to create ansible config: %s", err)
             return
         }
-        fd, err := os.OpenFile("vars.yml", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+
+        fd, err := os.OpenFile("deploy.yml", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
         if err != nil {
             log.Printf("Failed to open vars.yml: %s", err)
             return
         }
-        fmt.Fprintf(fd, fmt.Sprintf(`ip_address: '%s'
-username: '%s'
-password: '%s'
-operation: '%s'
-service_name: '%s'
-service_port: %d
-`, config.Hostname, config.Username, config.Password, op, demo.ServiceName, demo.Port))
-        fd.Close()
+        defer fd.Close()
+
+        fmt.Fprintf(fd, "%s\n%s", ansibleBegin, end)
 
         log.Printf("Running Ansible to configure the firewall ...")
         c2 := exec.Command(AnsibleExecutable, "-i", "hosts", "deploy.yml")
@@ -203,22 +215,28 @@ service_port: %d
 
         log.Printf("Done!")
     } else if demo.Method == "terraform" {
-        dstDir := fmt.Sprintf("%s/tf", BaseDir)
+        dstDir := fmt.Sprintf("%s/tricky", BaseDir)
 
-        log.Printf("Updating terraform variables ...")
+        log.Printf("Updating terraform plan ...")
         if err = os.Chdir(dstDir); err != nil {
             log.Printf("Failed cd: %s", err)
             return
         }
-        fd, err := os.OpenFile("terraform.tfvars", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+
+        end, err := terraformConfig(demo.Services)
+        if err != nil {
+            log.Printf("Failed to generate terraform config: %s", err)
+            return
+        }
+
+        fd, err := os.OpenFile("plan.tf", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
         if err != nil {
             log.Printf("Failed to open terraform.tfvars: %s", err)
             return
         }
-        fmt.Fprintf(fd, fmt.Sprintf(`Port = "%d"
-ServiceName = %q
-`, demo.Port, demo.ServiceName))
-        fd.Close()
+        defer fd.Close()
+
+        fmt.Fprintf(fd, "%s\n%s", terraformBegin, end)
 
         log.Printf("Running Terraform to configure the firewall ...")
         c3 := exec.Command(TerraformBinary, "init")
@@ -248,8 +266,65 @@ ServiceName = %q
     fmt.Fprintf(w, "Hello, world!")
 }
 
-func ansibleOperationFor(svc string) (string, error) {
+func terraformConfig(dsl []DemoService) (string, error) {
+    var b bytes.Buffer
+    var b2 bytes.Buffer
+
+    b2.WriteString("\nresource \"panos_security_policies\" \"sec_rules\"{\n")
+
+    for i, svc := range dsl {
+        dsts := make([]string, len(svc.Ports))
+        for i := range svc.Ports {
+            dsts[i] = fmt.Sprintf("%d", svc.Ports[i])
+        }
+        dst := strings.Join(dsts, ",")
+        b.WriteString(fmt.Sprintf(`
+resource "panos_service_object" "so%d" {
+    name = "%s"
+    description = "Corporate application service"
+    protocol = "tcp"
+    destination_port = "%s"
+}
+`, i, svc.Name, dst))
+        b2.WriteString(fmt.Sprintf(`
+    rule {
+        name = "Allow %s"
+        source_zones = ["${panos_zone.zut.name}"]
+        source_addresses = ["any"]
+        source_users = ["any"]
+        hip_profiles = ["any"]
+        destination_zones = ["${panos_zone.zt.name}"]
+        destination_addresses = ["any"]
+        applications = ["any"]
+        services = ["${panos_service_object.so%d.name}"]
+        categories = ["any"]
+        action = "allow"
+    }`, svc.Name, i))
+    }
+
+    b2.WriteString(`
+    rule {
+        name = "Deny everything else"
+        source_zones = ["any"]
+        source_addresses = ["any"]
+        source_users = ["any"]
+        hip_profiles = ["any"]
+        destination_zones = ["any"]
+        destination_addresses = ["any"]
+        applications = ["any"]
+        services = ["application-default"]
+        categories = ["any"]
+        action = "deny"
+    }
+}
+`)
+
+    return b.String() + "\n" + b2.String(), nil
+}
+
+func ansibleConfig(dsl []DemoService) (string, error) {
     var err error
+    var b bytes.Buffer
 
     if fw.ApiKey == "" {
         if err = fw.Initialize(); err != nil {
@@ -257,18 +332,85 @@ func ansibleOperationFor(svc string) (string, error) {
         }
     }
 
-    list, err := fw.Objects.Services.GetList("")
+    services, err := fw.Objects.Services.GetList("")
     if err != nil {
         return "", err
     }
 
-    for _, v := range list {
-        if svc == v {
-            return "update", nil
-        }
+    policies, err := fw.Policies.Security.GetList("", "")
+    if err != nil {
+        return "", err
     }
 
-    return "add", nil
+    // Remove all policies.
+    for _, p := range policies {
+        b.WriteString(fmt.Sprintf(`
+  - name: "Removing security policy %s"
+    panos_security_rule:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      operation: 'delete'
+      rule_name: '%s'
+`, p, p))
+    }
+
+    // Remove all services.
+    for _, s := range services {
+        b.WriteString(fmt.Sprintf(`
+  - name: "Removing service %s"
+    panos_object:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      operation: 'delete'
+      serviceobject: '%s'
+`, s, s))
+    }
+
+    // Build config to add back in.
+    for _, s := range dsl {
+        dsts := make([]string, len(s.Ports))
+        for i := range s.Ports {
+            dsts[i] = fmt.Sprintf("%d", s.Ports[i])
+        }
+        dst := strings.Join(dsts, ",")
+        b.WriteString(fmt.Sprintf(`
+  - name: "Add service %s"
+    panos_object:
+      operation: 'add'
+      serviceobject: '%s'
+      destination_port: '%s'
+      protocol: 'tcp'
+      description: 'Corporate application service'
+
+  - name: "Add security rule for %s"
+    panos_security_rule:
+      operation: 'add'
+      rule_name: 'Allow %s'
+      description: 'Allow corporate app'
+      source_zone: 'L3-untrust'
+      destination_zone: 'L3-trust'
+      service: ['%s']
+      action: 'allow'
+`, s, s, dst, s, s, s))
+    }
+
+    // Add in deny all security policy.
+    b.WriteString(`
+  - name: "Add in Deny All"
+    panos_security_rule:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
+      operation: 'add'
+      rule_name: 'Deny everything else'
+      action: 'deny'
+      commit: True
+`)
+
+    // Done!
+    return b.String(), nil
 }
 
 func copyAllFiles() error {
@@ -276,11 +418,11 @@ func copyAllFiles() error {
 
     log.Printf("Copying files into place ...")
 
-    if err = copyFiles(fmt.Sprintf("%s/an", RepoDir), fmt.Sprintf("%s/an", BaseDir)); err != nil {
+    if err = copyFiles(fmt.Sprintf("%s/anchor", RepoDir), fmt.Sprintf("%s/anchor", BaseDir)); err != nil {
         return err
     }
 
-    if err = copyFiles(fmt.Sprintf("%s/tf", RepoDir), fmt.Sprintf("%s/tf", BaseDir)); err != nil {
+    if err = copyFiles(fmt.Sprintf("%s/tricky", RepoDir), fmt.Sprintf("%s/tricky", BaseDir)); err != nil {
         return err
     }
 
@@ -325,7 +467,7 @@ func loadDemoConfig() (*DemoConfig, error) {
 
     // Read the config from the repo.
     log.Printf("Reading settings.json ...")
-    fd, err := os.Open(fmt.Sprintf("%s/settings.json", RepoDir))
+    fd, err := os.Open(fmt.Sprintf("%s/%s/settings.json", BaseDir, config.GitHubAccount))
     if err != nil {
         return nil, fmt.Errorf("Failed to open settings.json: %s", err)
     }
@@ -353,6 +495,7 @@ func init() {
     if err != nil {
         panic(err)
     }
+    defer fd.Close()
 
     body, err := ioutil.ReadAll(fd)
     if err != nil {
@@ -369,6 +512,28 @@ func init() {
     os.Setenv("PANOS_HOSTNAME", config.Hostname)
     os.Setenv("PANOS_USERNAME", config.Username)
     os.Setenv("PANOS_PASSWORD", config.Password)
+
+    // Get the Ansible config prefix.
+    afd, err := os.Open(fmt.Sprintf("%s/anchor/deploy.yml", RepoDir))
+    if err != nil {
+        panic(err)
+    }
+    defer afd.Close()
+    ansibleBegin, err = ioutil.ReadAll(afd)
+    if err != nil {
+        panic(err)
+    }
+
+    // Get the Terraform config begin.
+    tfd, err := os.Open(fmt.Sprintf("%s/tricky/plan.tf", RepoDir))
+    if err != nil {
+        panic(err)
+    }
+    defer tfd.Close()
+    terraformBegin, err = ioutil.ReadAll(tfd)
+    if err != nil {
+        panic(err)
+    }
 
     // Create pango connection to the firewall for Ansible.  Don't initialize
     // at this point because likely the firewall hasn't come up yet and had

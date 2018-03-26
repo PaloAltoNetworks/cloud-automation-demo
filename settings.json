@@ -1,5 +1,0 @@
-{
-    "app_name": "company app",
-    "port": 2321,
-    "exec": "ansible"
-}
