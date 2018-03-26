@@ -399,7 +399,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
       destination_zone: 'L3-trust'
       service: ['%s']
       action: 'allow'
-`, s, s, dst, s, s, s))
+`, s.Name, s.Name, dst, s.Name, s.Name, s.Name))
     }
 
     // Add in deny all security policy.
