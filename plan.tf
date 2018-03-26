@@ -151,7 +151,7 @@ provider "github" {
 }
 
 resource "github_repository_webhook" "hook" {
-    repository = "cloud-automation-demo"
+    repository = "${var.github_account}"
     name = "web"
     events = ["push"]
     configuration {
