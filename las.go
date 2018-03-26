@@ -378,6 +378,9 @@ func ansibleConfig(dsl []DemoService) (string, error) {
         b.WriteString(fmt.Sprintf(`
   - name: "Add service %s"
     panos_object:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
       operation: 'add'
       serviceobject: '%s'
       destination_port: '%s'
@@ -386,6 +389,9 @@ func ansibleConfig(dsl []DemoService) (string, error) {
 
   - name: "Add security rule for %s"
     panos_security_rule:
+      ip_address: '{{ ip_address }}'
+      username: '{{ username }}'
+      password: '{{ password }}'
       operation: 'add'
       rule_name: 'Allow %s'
       description: 'Allow corporate app'
