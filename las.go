@@ -399,6 +399,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
       destination_zone: 'L3-trust'
       service: ['%s']
       action: 'allow'
+      commit: False
 `, s.Name, s.Name, dst, s.Name, s.Name, s.Name))
     }
 
