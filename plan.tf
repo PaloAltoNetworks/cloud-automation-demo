@@ -169,7 +169,7 @@ resource "null_resource" "fwinit" {
     }
 
     provisioner "local-exec" {
-        command = "./fw_init.sh ${aws_instance.panos.public_ip} ${var.panos_username} '${random_string.randPrefix.result}${random_string.randSuffix.result}'"
+        command = "./fw_init.sh ${aws_instance.panos.public_ip} ${var.panos_username} '${random_string.randPrefix.result}${random_string.randSuffix.result}' ${var.local_ssh_key_path}"
     }
 }
 
