@@ -245,15 +245,21 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
             log.Printf("Failed to run terraform init: %s", err)
             return
         }
-        c4 := exec.Command(TerraformBinary, "apply", "-auto-approve")
+        c4 := exec.Command(TerraformBinary, "plan")
         c4.Stdout, c4.Stderr = lf, lf
         if err = c4.Run(); err != nil {
+            log.Printf("Failed to run terraform plan: %s", err)
+            return
+        }
+        c5 := exec.Command(TerraformBinary, "apply", "-auto-approve")
+        c5.Stdout, c5.Stderr = lf, lf
+        if err = c5.Run(); err != nil {
             log.Printf("Failed to run terraform apply: %s", err)
             return
         }
-        c5 := exec.Command(CommitBinary, "-c", data.Commit.Msg)
-        c5.Stdout, c5.Stderr = lf, lf
-        if err = c5.Run(); err != nil {
+        c6 := exec.Command(CommitBinary, "-c", data.Commit.Msg)
+        c6.Stdout, c6.Stderr = lf, lf
+        if err = c6.Run(); err != nil {
             log.Printf("Failed to commit: %s", err)
             return
         }
@@ -405,7 +411,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
 
     // Add in deny all security policy.
     b.WriteString(`
-  - name: "Add in Deny All"
+  - name: "Add Deny All security policy and commit"
     panos_security_rule:
       ip_address: '{{ ip_address }}'
       username: '{{ username }}'
