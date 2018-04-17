@@ -13,8 +13,11 @@ resource "random_string" "randPrefix" {
 }
 
 resource "random_string" "randSuffix" {
-    length = 9
-    override_special = "!@#%^&*()[]/?|,.-_+:;"
+    length = 14
+    upper = true
+    lower = true
+    number = true
+    special = false
 }
 
 resource "random_string" "sgName" {
