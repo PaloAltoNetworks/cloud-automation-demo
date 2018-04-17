@@ -343,7 +343,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
         return "", err
     }
 
-    policies, err := fw.Policies.Security.GetList("", "")
+    policies, err := fw.Policies.Security.GetList("")
     if err != nil {
         return "", err
     }
