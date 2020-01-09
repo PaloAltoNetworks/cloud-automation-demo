@@ -43,7 +43,7 @@ func main() {
         log.Fatalf("Failed: %s", err)
     }
 
-    job, err = fw.Commit(comment, true, true, false, true)
+    job, err = fw.Commit(comment, nil, true, true, false, true)
     if err != nil {
         log.Fatalf("Error in commit: %s", err)
     } else if job == 0 {
