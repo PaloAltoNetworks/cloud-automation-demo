@@ -14,12 +14,14 @@ import (
     "github.com/PaloAltoNetworks/pango"
 )
 
-const BaseDir string = "/home/ec2-user"
-const RepoName string = "cloud-automation-demo"
-const RepoDir string = "/home/ec2-user/cloud-automation-demo"
-const AnsibleExecutable string = "/usr/local/bin/ansible-playbook"
-const TerraformBinary string = "/home/ec2-user/bin/terraform"
-const CommitBinary string = "/home/ec2-user/bin/commit"
+const (
+    BaseDir string = "/home/ec2-user"
+    RepoName string = "cloud-automation-demo"
+    RepoDir string = "/home/ec2-user/cloud-automation-demo"
+    AnsibleExecutable string = "/usr/local/bin/ansible-playbook"
+    TerraformBinary string = "/home/ec2-user/bin/terraform"
+    CommitBinary string = "/home/ec2-user/bin/commit"
+)
 
 type Ping struct {
     Hook HookInfo `json:"hook"`
@@ -146,7 +148,7 @@ func handleReq(w http.ResponseWriter, r *http.Request) {
     for _, v := range []string{"\"", "'", "`", "$"} {
         if strings.Contains(data.Commit.Msg, v) {
             log.Printf("Commit message contains %q, setting commit message to default value", v)
-            data.Commit.Msg = "Perform commit"
+            data.Commit.Msg = "Performing commit"
             break
         }
     }
@@ -295,14 +297,14 @@ resource "panos_service_object" "so%d" {
         b2.WriteString(fmt.Sprintf(`
     rule {
         name = "Allow %s"
-        source_zones = ["${panos_zone.zut.name}"]
+        source_zones = [panos_zone.zut.name]
         source_addresses = ["any"]
         source_users = ["any"]
         hip_profiles = ["any"]
-        destination_zones = ["${panos_zone.zt.name}"]
+        destination_zones = [panos_zone.zt.name]
         destination_addresses = ["any"]
         applications = ["any"]
-        services = ["${panos_service_object.so%d.name}"]
+        services = [panos_service_object.so%d.name]
         categories = ["any"]
         action = "allow"
     }`, svc.Name, i))
@@ -353,10 +355,8 @@ func ansibleConfig(dsl []DemoService) (string, error) {
         b.WriteString(fmt.Sprintf(`
   - name: "Removing security policy %s"
     panos_security_rule:
-      ip_address: '{{ ip_address }}'
-      username: '{{ username }}'
-      password: '{{ password }}'
-      operation: 'delete'
+      provider: '{{ provider }}'
+      state: 'absent'
       rule_name: '%s'
 `, p, p))
     }
@@ -365,12 +365,11 @@ func ansibleConfig(dsl []DemoService) (string, error) {
     for _, s := range services {
         b.WriteString(fmt.Sprintf(`
   - name: "Removing service %s"
-    panos_object:
-      ip_address: '{{ ip_address }}'
-      username: '{{ username }}'
-      password: '{{ password }}'
-      operation: 'delete'
-      serviceobject: '%s'
+    panos_service_object:
+      provider: '{{ provider }}'
+      state: 'absent'
+      commit: false
+      name: '%s'
 `, s, s))
     }
 
@@ -383,22 +382,17 @@ func ansibleConfig(dsl []DemoService) (string, error) {
         dst := strings.Join(dsts, ",")
         b.WriteString(fmt.Sprintf(`
   - name: "Add service %s"
-    panos_object:
-      ip_address: '{{ ip_address }}'
-      username: '{{ username }}'
-      password: '{{ password }}'
-      operation: 'add'
-      serviceobject: '%s'
+    panos_service_object:
+      provider: '{{ provider }}'
+      name: '%s'
+      description: 'Corporate application service'
       destination_port: '%s'
       protocol: 'tcp'
-      description: 'Corporate application service'
+      commit: false
 
   - name: "Add security rule for %s"
     panos_security_rule:
-      ip_address: '{{ ip_address }}'
-      username: '{{ username }}'
-      password: '{{ password }}'
-      operation: 'add'
+      provider: '{{ provider }}'
       rule_name: 'Allow %s'
       description: 'Allow corporate app'
       source_zone: 'L3-untrust'
@@ -413,10 +407,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
     b.WriteString(`
   - name: "Add Deny All security policy and commit"
     panos_security_rule:
-      ip_address: '{{ ip_address }}'
-      username: '{{ username }}'
-      password: '{{ password }}'
-      operation: 'add'
+      provider: '{{ provider }}'
       rule_name: 'Deny everything else'
       action: 'deny'
       commit: True
