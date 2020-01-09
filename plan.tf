@@ -126,6 +126,7 @@ cp -r cloud-automation-demo/tricky .
 cp -r cloud-automation-demo/anchor .
 echo "Ansible: install and prep ..."
 pip install pan-python pandevice xmltodict ansible
+ansible-galaxy install PaloAltoNetworks.paloaltonetworks
 echo "provider:" > anchor/vars.yml
 echo "    ip_address: '${aws_instance.panos.public_ip}'" >> anchor/vars.yml
 echo "    username: '${var.panos_username}'" >> anchor/vars.yml
