@@ -3,9 +3,9 @@ This repo enables you to perform cloud automation demos using Terraform or Ansib
 
 # Prereqs
 
-1. Install golang 1.8 or later
+1. Install golang 1.13 or later
 2. `go get golang.org/x/crypto/ssh`
-3. Install terraform (developed against 0.11.4)
+3. Install terraform (developed against 0.12)
 4. Local environment is assumed to be either a Mac or Linux (one of the steps is to invoke a `/bin/bash` shell script)
 5. Whatever PAN-OS AMI you want to use, you'll need to have accepted the licensing agreement manually through the AWS marketplace (BYOL is used by default)
 
