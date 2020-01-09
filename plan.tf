@@ -1,10 +1,11 @@
 provider "aws" {
-    access_key = "${var.aws_access_key}"
-    secret_key = "${var.aws_secret_key}"
-    region = "${var.aws_region}"
+    access_key = var.aws_access_key
+    secret_key = var.aws_secret_key
+    region = var.aws_region
+    #skip_credentials_validation = true
 }
 
-resource "random_string" "randPrefix" {
+resource "random_string" "prefix" {
     length = 1
     lower = true
     upper = false
@@ -12,9 +13,16 @@ resource "random_string" "randPrefix" {
     special = false
 }
 
-resource "random_string" "randSuffix" {
-    length = 9
-    override_special = "!@#%^&*()[]/?|,.-_+:;"
+resource "random_string" "suffix" {
+    length = 14
+    upper = true
+    lower = true
+    number = true
+    special = false
+}
+
+locals {
+    password = join("", [random_string.prefix.result, random_string.suffix.result])
 }
 
 resource "random_string" "sgName" {
@@ -24,7 +32,7 @@ resource "random_string" "sgName" {
 }
 
 resource "aws_security_group" "sg" {
-    name = "${random_string.sgName.result}"
+    name = random_string.sgName.result
     description = "cloud automation demo sg"
 
     ingress {
@@ -60,10 +68,10 @@ resource "aws_security_group" "sg" {
 }
 
 resource "aws_instance" "panos" {
-    ami = "${var.panos_ami}"
+    ami = var.panos_ami
     instance_type = "m4.xlarge"
-    key_name = "${var.aws_ssh_key_name}"
-    security_groups = ["${aws_security_group.sg.name}"]
+    key_name = var.aws_ssh_key_name
+    security_groups = [aws_security_group.sg.name]
 
     ebs_block_device {
         device_name = "/dev/xvda"
@@ -74,10 +82,10 @@ resource "aws_instance" "panos" {
 }
 
 resource "aws_instance" "linux" {
-    ami = "${var.linux_ami}"
-    instance_type = "${var.linux_instance_type}"
-    key_name = "${var.aws_ssh_key_name}"
-    security_groups = ["${aws_security_group.sg.name}"]
+    ami = var.linux_ami
+    instance_type = var.linux_instance_type
+    key_name = var.aws_ssh_key_name
+    security_groups = [aws_security_group.sg.name]
     user_data = <<INIT
 #!/bin/bash
 echo "Starting user data config initialization"
@@ -87,7 +95,7 @@ echo '{' > config.json
 echo '  "github_account": "${var.github_account}",' >> config.json
 echo '  "hostname": "${aws_instance.panos.public_ip}",' >> config.json
 echo '  "username": "${var.panos_username}",' >> config.json
-echo '  "password": "${random_string.randPrefix.result}${random_string.randSuffix.result}"' >> config.json
+echo '  "password": "${local.password}"' >> config.json
 echo '}' >> config.json
 echo "Making required directories ..."
 mkdir bin
@@ -101,7 +109,7 @@ echo 'export GOPATH=/home/ec2-user/golang' >> /home/ec2-user/.bash_profile
 echo 'export GOBIN=/home/ec2-user/golang/bin' >> /home/ec2-user/.bash_profile
 echo 'export PANOS_HOSTNAME=${aws_instance.panos.public_ip}' >> /home/ec2-user/.bash_profile
 echo 'export PANOS_USERNAME=${var.panos_username}' >> /home/ec2-user/.bash_profile
-echo 'export PANOS_PASSWORD="${random_string.randPrefix.result}${random_string.randSuffix.result}"' >> /home/ec2-user/.bash_profile
+echo 'export PANOS_PASSWORD="${local.password}"' >> /home/ec2-user/.bash_profile
 echo "alias s='cd ..'" >> /home/ec2-user/.bash_profile
 echo "alias la='ls -laF'" >> /home/ec2-user/.bash_profile
 echo "alias wl='tail -f /tmp/hook.log'" >> /home/ec2-user/.bash_profile
@@ -118,9 +126,10 @@ cp -r cloud-automation-demo/tricky .
 cp -r cloud-automation-demo/anchor .
 echo "Ansible: install and prep ..."
 pip install pan-python pandevice xmltodict ansible
-echo "ip_address: '${aws_instance.panos.public_ip}'" > anchor/vars.yml
-echo "username: '${var.panos_username}'" >> anchor/vars.yml
-echo "password: '${random_string.randPrefix.result}${random_string.randSuffix.result}'" >> anchor/vars.yml
+echo "provider:" > anchor/vars.yml
+echo "    ip_address: '${aws_instance.panos.public_ip}'" >> anchor/vars.yml
+echo "    username: '${var.panos_username}'" >> anchor/vars.yml
+echo "    password: '${local.password}'" >> anchor/vars.yml
 touch anchor/deploy.retry
 echo "[fw]" > anchor/hosts
 echo "${aws_instance.panos.public_ip} ansible_python_interpreter=python" >> anchor/hosts
@@ -129,7 +138,7 @@ touch tricky/plan.tf
 touch tricky/terraform.tfstate
 touch tricky/terraform.tfstate.backup
 cd bin
-curl -o tf.zip https://releases.hashicorp.com/terraform/0.11.4/terraform_0.11.4_linux_amd64.zip
+curl -o tf.zip https://releases.hashicorp.com/terraform/0.12.19/terraform_0.12.19_linux_amd64.zip
 unzip tf.zip
 rm -f tf.zip
 cd ..
@@ -149,12 +158,12 @@ INIT
 }
 
 provider "github" {
-    token = "${var.github_token}"
+    token = var.github_token
     organization = "HookOrg"
 }
 
 resource "github_repository_webhook" "hook" {
-    repository = "${var.github_account}"
+    repository = var.github_account
     name = "web"
     events = ["push"]
     configuration {
@@ -165,23 +174,23 @@ resource "github_repository_webhook" "hook" {
 
 resource "null_resource" "fwinit" {
     triggers {
-        key = "${aws_instance.panos.public_ip}"
+        key = aws_instance.panos.public_ip
     }
 
     provisioner "local-exec" {
-        command = "./fw_init.sh ${aws_instance.panos.public_ip} ${var.panos_username} '${random_string.randPrefix.result}${random_string.randSuffix.result}' ${var.local_ssh_key_path}"
+        command = "./fw_init.sh ${aws_instance.panos.public_ip} ${var.panos_username} '${local.password}' ${var.local_ssh_key_path}"
     }
 }
 
 
 output "panos_ip" {
-    value = "${aws_instance.panos.public_ip}"
+    value = panos.public_ip
 }
 
 output "panos_password" {
-    value = "${random_string.randPrefix.result}${random_string.randSuffix.result}"
+    value = local.password
 }
 
 output "linux_ip" {
-    value = "${aws_instance.linux.public_ip}"
+    value = linux.public_ip
 }
