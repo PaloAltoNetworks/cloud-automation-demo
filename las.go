@@ -334,6 +334,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
     var err error
     var b bytes.Buffer
 
+    /*
     if fw.ApiKey == "" {
         if err = fw.Initialize(); err != nil {
             return "", err
@@ -372,6 +373,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
       name: '%s'
 `, s, s))
     }
+    */
 
     // Build config to add back in.
     for _, s := range dsl {
@@ -410,6 +412,7 @@ func ansibleConfig(dsl []DemoService) (string, error) {
       provider: '{{ provider }}'
       rule_name: 'Deny everything else'
       action: 'deny'
+      location: 'bottom'
       commit: True
 `)
 
