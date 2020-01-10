@@ -145,9 +145,9 @@ rm -f tf.zip
 cd ..
 echo "Building webhook listener ..."
 touch /tmp/hook.log
-GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
+HOME=/home/ec2-user GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/las /home/ec2-user/cloud-automation-demo/las.go
 echo "Building commit binary ..."
-GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/commit /home/ec2-user/cloud-automation-demo/commit.go
+HOME=/home/ec2-user GOPATH=/home/ec2-user/golang go build -o /home/ec2-user/bin/commit /home/ec2-user/cloud-automation-demo/commit.go
 echo "Fixing all permissions ..."
 chown -R ec2-user:ec2-user /home/ec2-user
 chown ec2-user:ec2-user /tmp/hook.log
@@ -165,7 +165,6 @@ provider "github" {
 
 resource "github_repository_webhook" "hook" {
     repository = var.github_account
-    name = "web"
     events = ["push"]
     configuration {
         url = "http://${aws_instance.linux.public_ip}:8080/"
@@ -174,7 +173,7 @@ resource "github_repository_webhook" "hook" {
 }
 
 resource "null_resource" "fwinit" {
-    triggers {
+    triggers = {
         key = aws_instance.panos.public_ip
     }
 
@@ -185,7 +184,7 @@ resource "null_resource" "fwinit" {
 
 
 output "panos_ip" {
-    value = panos.public_ip
+    value = aws_instance.panos.public_ip
 }
 
 output "panos_password" {
@@ -193,5 +192,5 @@ output "panos_password" {
 }
 
 output "linux_ip" {
-    value = linux.public_ip
+    value = aws_instance.linux.public_ip
 }
