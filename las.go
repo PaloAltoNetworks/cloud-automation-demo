@@ -331,10 +331,11 @@ resource "panos_service_object" "so%d" {
 }
 
 func ansibleConfig(dsl []DemoService) (string, error) {
-    var err error
     var b bytes.Buffer
 
     /*
+    var err error
+
     if fw.ApiKey == "" {
         if err = fw.Initialize(); err != nil {
             return "", err
