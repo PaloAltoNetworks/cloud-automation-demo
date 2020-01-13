@@ -33,6 +33,7 @@
   - name: "Get all services"
     panos_object_facts:
       provider: '{{ provider }}'
+      object_type: 'service'
       name_regex: '.*'
     register: srv
 
