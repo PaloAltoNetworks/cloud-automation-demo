@@ -39,13 +39,13 @@
   - name: "Remove all the old security rules"
     panos_security_rule:
       provider: '{{ provider }}'
-      rule_name: '{{ item.rule_name }}'
+      rule_name: '{{ item }}'
       commit: False
     loop: '{{ rules.rules }}'
     loop_control:
-      label: '{{ item.rule_name }}'
+      label: '{{ item }}'
     when:
-      - item.rule_name != "Deny everything else"
+      - item != "Deny everything else"
 
   - name: "Remove all old services"
     panos_service_object:
